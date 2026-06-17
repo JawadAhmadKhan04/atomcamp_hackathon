@@ -1,12 +1,5 @@
 import { retrieveRelevantRegulations } from '../../services/retrievalService.js';
 
-/**
- * Builds a retrieval query from the complaint's substantive fields and
- * fetches the most relevant regulation chunks from pgvector.
- *
- * Uses subject + main_points + nature-relevant fields rather than the whole
- * row (CNIC, phone, etc. add noise to the embedding without adding meaning).
- */
 export async function retrieveNode(state) {
   const { complaint } = state;
 
@@ -27,6 +20,16 @@ export async function retrieveNode(state) {
 
   try {
     const matches = await retrieveRelevantRegulations(queryText, 6);
+
+    // TEMP DIAGNOSTIC LOGGING -- remove once retrieval quality is confirmed
+    console.log('\n[retrieveNode] query text:\n', queryText);
+    console.log('[retrieveNode] retrieved regulations:');
+    matches.forEach((m) => {
+      const simText = m.similarity === null ? 'fixed-include' : m.similarity.toFixed(4);
+      console.log(`  reg ${m.regulation_number} (sim ${simText}) - ${m.title}`);
+    });
+    console.log('');
+
     return { retrievedRegulations: matches };
   } catch (err) {
     return {

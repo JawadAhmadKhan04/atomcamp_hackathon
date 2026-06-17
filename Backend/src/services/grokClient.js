@@ -1,44 +1,36 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-const { GEMINI_API_KEY } = process.env;
+const { GROQ_API_KEY } = process.env;
 
-if (!GEMINI_API_KEY) {
-  throw new Error('Missing GEMINI_API_KEY in .env');
+if (!GROQ_API_KEY) {
+  throw new Error('Missing GROQ_API_KEY in .env');
 }
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
- * Call Gemini's native generateContent endpoint.
+ * Call Groq's OpenAI-compatible chat completions endpoint.
  * @param {{system?: string, prompt: string, jsonMode?: boolean, temperature?: number}} opts
  * @returns {Promise<string>} raw text content of the model's reply
  */
 export async function callGrok({ system, prompt, jsonMode = false, temperature = 0.2 }) {
-  const contents = [];
+  const messages = [];
 
-  // Gemini uses a different format: system instruction is separate
-  const systemInstruction = system ? { parts: [{ text: system }] } : undefined;
-
-  contents.push({
-    role: 'user',
-    parts: [{ text: prompt }],
-  });
+  if (system) {
+    messages.push({ role: 'system', content: system });
+  }
+  messages.push({ role: 'user', content: prompt });
 
   const body = {
-    contents,
-    generationConfig: {
-      temperature,
-    },
+    model: MODEL,
+    messages,
+    temperature,
   };
 
-  if (systemInstruction) {
-    body.systemInstruction = systemInstruction;
-  }
-
   if (jsonMode) {
-    body.generationConfig.responseMimeType = 'application/json';
+    body.response_format = { type: 'json_object' };
   }
 
   let response;
@@ -47,25 +39,26 @@ export async function callGrok({ system, prompt, jsonMode = false, temperature =
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify(body),
     });
   } catch (err) {
-    console.warn(`Gemini API call failed: ${err.message}. Falling back to rule-based engine...`);
+    console.warn(`Groq API call failed: ${err.message}. Falling back to rule-based engine...`);
     return getRuleBasedFallback(system, prompt);
   }
 
   if (!response.ok) {
     const errText = await response.text();
-    console.warn(`Gemini API returned error (${response.status}): ${errText}. Falling back to rule-based engine...`);
+    console.warn(`Groq API returned error (${response.status}): ${errText}. Falling back to rule-based engine...`);
     return getRuleBasedFallback(system, prompt);
   }
 
   const data = await response.json();
-  const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const content = data?.choices?.[0]?.message?.content;
 
   if (!content) {
-    console.warn('Gemini API returned no content. Falling back to rule-based engine...');
+    console.warn('Groq API returned no content. Falling back to rule-based engine...');
     return getRuleBasedFallback(system, prompt);
   }
 
@@ -73,7 +66,7 @@ export async function callGrok({ system, prompt, jsonMode = false, temperature =
 }
 
 /**
- * Local rule-based fallback engine to mock Gemini's responses when API is unavailable.
+ * Local rule-based fallback engine to mock Groq's responses when API is unavailable.
  */
 function getRuleBasedFallback(system, prompt) {
   // Admissibility Classification Assistant
@@ -127,7 +120,7 @@ function getRuleBasedFallback(system, prompt) {
 
     const loc = `${district} ${city}`.toLowerCase();
     let office = "Head Office (Islamabad)";
-    
+
     if (loc.includes("karachi") || loc.includes("sindh") || loc.includes("clifton")) {
       office = "Karachi";
     } else if (loc.includes("lahore") || loc.includes("punjab")) {
@@ -197,7 +190,7 @@ function getRuleBasedFallback(system, prompt) {
 }
 
 /**
- * Call Gemini and parse the reply as JSON, with one retry if parsing fails.
+ * Call Groq and parse the reply as JSON, with one retry if parsing fails.
  * @param {{system?: string, prompt: string, temperature?: number}} opts
  * @returns {Promise<object>}
  */
