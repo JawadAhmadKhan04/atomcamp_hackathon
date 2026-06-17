@@ -10,7 +10,7 @@ import Button from "../components/common/Button";
 import { natureOfComplaintOptions } from "../data/natureOfComplaintOptions";
 import { admissibilityOptions } from "../data/admissibilityOptions";
 import { agencyOptions, departmentOptions, subOfficeOptions } from "../data/agencyOptions";
-import { classifyComplaint } from "../api/automationApi";
+import { classifyComplaint, confirmClassification } from "../api/automationApi";
 
 const sidebarItems = [
   "Home",
@@ -80,9 +80,24 @@ export default function RegistrarOneInterface() {
     setAiSuggested(false);
     try {
       const result = await classifyComplaint(formData);
-      updateField("admissibility", result.admissibility);
-      updateField("remarks1", result.reasons);
-      updateField("admissibilityStatus", result.status === "In Progress" ? "Admitted" : "Not Admitted");
+      
+      updateField("admissibility", result.admissibility || "");
+      updateField("remarks1", result.remarks || "");
+      
+      let mappedStatus = "Select";
+      if (result.admissibilityStatus === "admit") mappedStatus = "Admitted";
+      if (result.admissibilityStatus === "reject") mappedStatus = "Not Admitted";
+      
+      if (mappedStatus !== "Select") {
+        updateField("admissibilityStatus", mappedStatus);
+      }
+
+      if (result.forwardEmail) {
+        updateField("remarks2", `[AI Draft Email generated for ${result.forwardEmail.to}]`);
+      } else if (result.rejectionLetter) {
+        updateField("remarks2", `[AI Draft Rejection Letter generated: ${result.rejectionLetter.formReference}]`);
+      }
+      
       setAiSuggested(true);
     } catch (err) {
       console.error(err);
@@ -120,10 +135,15 @@ export default function RegistrarOneInterface() {
     }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     console.log("Registrar-I form saved successfully:", formData);
-    alert(`Complaint ${formData.complaintNumber} Saved (Mock Action).`);
+    
+    if (aiSuggested) {
+      await confirmClassification(formData.complaintNumber);
+    }
+
+    alert(`Complaint ${formData.complaintNumber} Saved.`);
     navigate("/");
   };
 

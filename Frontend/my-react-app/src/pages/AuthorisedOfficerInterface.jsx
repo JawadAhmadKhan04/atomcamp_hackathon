@@ -11,7 +11,7 @@ import Button from "../components/common/Button";
 import { natureOfComplaintOptions } from "../data/natureOfComplaintOptions";
 import { admissibilityOptions } from "../data/admissibilityOptions";
 import { agencyOptions, departmentOptions, subOfficeOptions } from "../data/agencyOptions";
-import { classifyComplaint } from "../api/automationApi";
+import { classifyComplaint, confirmClassification } from "../api/automationApi";
 
 const sidebarItems = [
   "AO Home",
@@ -104,9 +104,25 @@ export default function AuthorisedOfficerInterface() {
     setAiSuggested(false);
     try {
       const result = await classifyComplaint(formData);
-      updateField("admissibility", result.admissibility);
-      updateField("remarks1", result.reasons);
-      updateField("admissibilityStatus", result.status === "In Progress" ? "Admitted" : "Not Admitted");
+      
+      updateField("admissibility", result.admissibility || "");
+      
+      let mappedStatus = "Select";
+      if (result.admissibilityStatus === "admit") mappedStatus = "Admitted";
+      if (result.admissibilityStatus === "reject") mappedStatus = "Not Admissible";
+      
+      if (mappedStatus !== "Select") {
+        updateField("admissibilityStatus", mappedStatus);
+      }
+
+      let extraRemark = "";
+      if (result.forwardEmail) {
+        extraRemark = `\n\n[AI Draft Email generated for ${result.forwardEmail.to}]`;
+      } else if (result.rejectionLetter) {
+        extraRemark = `\n\n[AI Draft Rejection Letter generated: ${result.rejectionLetter.formReference}]`;
+      }
+
+      updateField("remarks1", (result.remarks || "") + extraRemark);
       setAiSuggested(true);
     } catch (err) {
       console.error(err);
@@ -153,10 +169,15 @@ export default function AuthorisedOfficerInterface() {
     }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
     console.log("Authorised Officer form saved successfully:", formData);
-    alert(`Complaint ${formData.complaintNumber} Saved successfully (AO Mock Action).`);
+    
+    if (aiSuggested) {
+      await confirmClassification(formData.complaintNumber);
+    }
+
+    alert(`Complaint ${formData.complaintNumber} Saved successfully.`);
     navigate("/");
   };
 
